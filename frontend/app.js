@@ -399,17 +399,26 @@ function renderHeader() {
   $('#cart-count').setAttribute('aria-label', pluralize(count, 'item'));
 }
 
-async function checkHealth() {
+async function checkHealth(retries = 5) {
   const el = $('#api-status');
-  try {
-    const data = await api('/health', { toast: false });
-    const ok = data?.status === 'ok';
-    el.dataset.state = ok ? 'ok' : 'down';
-    $('.label', el).textContent = ok ? 'API online' : 'API degraded';
-  } catch (err) {
-    el.dataset.state = 'down';
-    $('.label', el).textContent = err.status === 0 ? 'API unreachable' : `API error (${err.status})`;
-    if (err.status === 0) notifyApiError(err, 'Health check');
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const data = await api('/health', { toast: false });
+      const ok = data?.status === 'ok';
+      el.dataset.state = ok ? 'ok' : 'down';
+      $('.label', el).textContent = ok ? 'API online' : 'API degraded';
+      return;
+    } catch (err) {
+      if (attempt < retries && err.status === 0) {
+        el.dataset.state = 'down';
+        $('.label', el).textContent = `Connecting (${attempt}/${retries})...`;
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      el.dataset.state = 'down';
+      $('.label', el).textContent = err.status === 0 ? 'API unreachable' : `API error (${err.status})`;
+      if (err.status === 0) notifyApiError(err, 'Health check');
+    }
   }
 }
 
